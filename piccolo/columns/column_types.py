@@ -120,6 +120,33 @@ class ConcatDelegate:
             )
 
 
+class InetDelegate:
+    """
+    Used in update queries to perform network address operations on INET columns, for example::
+
+        await Band.update({Band.ip_address: Band.ip_address + 25})
+        await Band.update({Band.ip_address: Band.ip_address - 1})
+
+    """
+
+    def get_querystring(
+        self,
+        column_name: str,
+        operator: Literal["+", "-"],
+        value: t.Union[int],
+        reverse: bool = False,
+    ) -> QueryString:
+        if isinstance(value, int):
+            if reverse:
+                return QueryString(f"CAST( {value} AS BIGINT) {operator} {column_name}")
+            else:
+                return QueryString(f"{column_name} {operator} CAST({value} AS BIGINT)")
+        raise ValueError(
+            "Only integers, floats, and other Integer columns can be "
+            "added."
+        )
+
+
 class MathDelegate:
     """
     Used in update queries to perform math operations on columns, for example::
@@ -698,6 +725,89 @@ class BigInt(Integer):
 
     @t.overload
     def __get__(self, obj: None, objtype=None) -> BigInt:
+        ...
+
+    def __get__(self, obj, objtype=None):
+        return obj.__dict__[self._meta.name] if obj else self
+
+    def __set__(self, obj, value: t.Union[int, None]):
+        obj.__dict__[self._meta.name] = value
+
+
+class Inet(Column):
+    """
+    The inet type holds an IPv4 or IPv6 host address, and optionally its subnet, all in one field.
+    The subnet is represented by the number of network address bits present in the host address (the “netmask”).
+    If the netmask is 32 and the address is IPv4, then the value does not indicate a subnet, only a single host.
+    In IPv6, the address length is 128 bits, so 128 bits specify a unique host address.
+    Note that if you want to accept only networks, you should use the cidr type rather than inet.
+
+    The input format for this type is address/y where address is an IPv4 or IPv6 address and y is the number of bits in the netmask.
+    If the /y portion is omitted, the netmask is taken to be 32 for IPv4 or 128 for IPv6,
+    so the value represents just a single host.
+    On display, the /y portion is suppressed if the netmask specifies a single host.
+
+    **Example**
+
+    .. code-block:: python
+
+        class Band(Table):
+            value = Inet()
+
+        # Create
+        >>> await Band(ip_address="10.1.1.1/32").save()
+
+        # Query
+        >>> await Band.select(Band.ip_address)
+        {'ip_address': "10.1.1.1/32"}
+
+    """
+    value_type = str
+    inet_delegate = InetDelegate()
+
+    def __init__(
+        self,
+        default: t.Union[str, Enum, t.Callable[[], str], None] = None,
+        **kwargs,
+    ) -> None:
+        self._validate_default(default, (str, None))
+
+        self.default = default
+        kwargs.update({"default": default})
+        super().__init__(**kwargs)
+
+    @property
+    def column_type(self):
+        engine_type = self._meta.engine_type
+        if engine_type in ["postgres", "cockroach"]:
+            return "INET"
+        elif engine_type == "sqlite":
+            return "TEXT"
+        raise Exception("Unrecognized engine type")
+
+    ###########################################################################
+    # For update queries
+
+    def __add__(self, value: t.Union[int]) -> QueryString:
+        return self.inet_delegate.get_querystring(
+            column_name=self._meta.db_column_name, operator="+", value=value
+        )
+
+    def __sub__(self, value: t.Union[int]) -> QueryString:
+        print(value)
+        return self.inet_delegate.get_querystring(
+            column_name=self._meta.db_column_name, operator="-", value=value
+        )
+
+    ###########################################################################
+    # Descriptors
+
+    @t.overload
+    def __get__(self, obj: Table, objtype=None) -> str:
+        ...
+
+    @t.overload
+    def __get__(self, obj: None, objtype=None) -> Inet:
         ...
 
     def __get__(self, obj, objtype=None):

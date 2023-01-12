@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import typing as t
+from ipaddress import IPv4Address, IPv4Interface
 from unittest import TestCase
 
 import pytest
@@ -13,7 +14,7 @@ from piccolo.columns.column_types import (
     Text,
     Timestamp,
     Timestamptz,
-    Varchar,
+    Varchar, Inet,
 )
 from piccolo.querystring import QueryString
 from piccolo.table import Table
@@ -164,6 +165,7 @@ class MyTable(Table):
     interval = Interval(null=True)
     varchar = Varchar(null=True)
     text = Text(null=True)
+    ip_address = Inet(null=True)
 
 
 INITIAL_DATETIME = datetime.datetime(
@@ -187,6 +189,35 @@ class OperatorTestCase:
 
 
 TEST_CASES = [
+    # Inet
+    OperatorTestCase(
+        description="ip address addition",
+        column=MyTable.ip_address,
+        initial="192.168.1.6",
+        querystring=MyTable.ip_address + 25,
+        expected=IPv4Address("192.168.1.31"),
+    ),
+    OperatorTestCase(
+        description="ip address substraction",
+        column=MyTable.ip_address,
+        initial="192.168.1.43",
+        querystring=MyTable.ip_address - 1,
+        expected=IPv4Address("192.168.1.42"),
+    ),
+    OperatorTestCase(
+        description="ip address/subnetmask addition",
+        column=MyTable.ip_address,
+        initial="192.168.1.6/24",
+        querystring=MyTable.ip_address + 25,
+        expected=IPv4Interface('192.168.1.31/24'),
+    ),
+    OperatorTestCase(
+        description="ip address/subnetmask substraction",
+        column=MyTable.ip_address,
+        initial="192.168.1.43/24",
+        querystring=MyTable.ip_address - 1,
+        expected=IPv4Interface("192.168.1.42/24"),
+    ),
     # Text
     OperatorTestCase(
         description="Add Text",
