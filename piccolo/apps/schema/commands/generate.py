@@ -35,7 +35,7 @@ from piccolo.columns.column_types import (
     Text,
     Timestamp,
     Timestamptz,
-    Varchar,
+    Varchar, Inet,
 )
 from piccolo.columns.defaults.interval import IntervalCustom
 from piccolo.columns.indexes import IndexMethod
@@ -305,6 +305,7 @@ COLUMN_TYPE_MAP: t.Dict[str, t.Type[Column]] = {
     "timestamp with time zone": Timestamptz,
     "timestamp without time zone": Timestamp,
     "uuid": UUID,
+    "inet": Inet,
 }
 
 # Re-map for Cockroach compatibility.
@@ -370,6 +371,7 @@ COLUMN_DEFAULT_PARSER = {
     UUID: None,
     Serial: None,
     ForeignKey: None,
+    Inet: re.compile(r"^'(?P<value>.*)'::inet$"),
 }
 
 # Re-map for Cockroach compatibility.
